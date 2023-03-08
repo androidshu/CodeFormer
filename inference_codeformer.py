@@ -127,6 +127,7 @@ def restore_face_and_upsampler(checkpoint, input_img_list, base_offest):
             restored_face = restored_face.astype('uint8')
             face_helper.add_restored_face(restored_face, cropped_face)
 
+        paste_start_time = time.time()
         # paste_back
         if not args.has_aligned:
             # upsample the background
@@ -142,7 +143,7 @@ def restore_face_and_upsampler(checkpoint, input_img_list, base_offest):
                                                                       face_upsampler=face_upsampler)
             else:
                 restored_img = face_helper.paste_faces_to_input_image(upsample_img=bg_img, draw_box=args.draw_box)
-
+        print('\n paste cost time:{:.2f}秒'.format(time.time() - paste_start_time))
         # save faces
         for idx, (cropped_face, restored_face) in tqdm(
                 enumerate(zip(face_helper.cropped_faces, face_helper.restored_faces)), desc="save faces",
@@ -160,6 +161,7 @@ def restore_face_and_upsampler(checkpoint, input_img_list, base_offest):
                 save_face_name = f'{save_face_name[:-4]}_{args.suffix}.png'
             save_restore_path = os.path.join(result_root, 'restored_faces', save_face_name)
             imwrite(restored_face, save_restore_path)
+
 
         # save restored img
         if not args.has_aligned and restored_img is not None:
@@ -187,7 +189,7 @@ if __name__ == '__main__':
     parser.add_argument('--draw_box', action='store_true', help='Draw the bounding box for the detected faces. Default: False')
     # large det_model: 'YOLOv5l', 'retinaface_resnet50'
     # small det_model: 'YOLOv5n', 'retinaface_mobile0.25'
-    parser.add_argument('--detection_model', type=str, default='retinaface_resnet50', 
+    parser.add_argument('--detection_model', type=str, default='retinaface_resnet50',
             help='Face detector. Optional: retinaface_resnet50, retinaface_mobile0.25, YOLOv5l, YOLOv5n, dlib. \
                 Default: retinaface_resnet50')
     parser.add_argument('--bg_upsampler', type=str, default='None', help='Background upsampler. Optional: realesrgan')
@@ -286,20 +288,18 @@ if __name__ == '__main__':
     if input_video:
         print('Video Saving...')
         # load images
-        video_frames = []
         img_list = sorted(glob.glob(os.path.join(result_root, 'final_results', '*.[jp][pn]g')))
-        for img_path in tqdm(img_list):
-            img = cv2.imread(img_path)
-            video_frames.append(img)
-        # write images to video
-        height, width = video_frames[0].shape[:2]
+        img = cv2.imread(img_list[0])
+        height, width = img.shape[:2]
         if args.suffix is not None:
             video_name = f'{video_name}_{args.suffix}.png'
         save_restore_path = os.path.join(result_root, f'{video_name}.mp4')
         vidwriter = VideoWriter(save_restore_path, height, width, fps, audio)
-         
-        for f in tqdm(video_frames, desc="save video frames"):
-            vidwriter.write_frame(f)
+
+        for img_path in tqdm(img_list):
+            # write images to video
+            img = cv2.imread(img_path)
+            vidwriter.write_frame(img)
         vidwriter.close()
 
     cost_time = time.time() - start_time
