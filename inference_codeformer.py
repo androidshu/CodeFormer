@@ -1,3 +1,4 @@
+import math
 import os
 import cv2
 import argparse
@@ -9,6 +10,9 @@ from basicsr.utils.download_util import load_file_from_url
 from basicsr.utils.misc import gpu_is_available, get_device
 from facelib.utils.face_restoration_helper import FaceRestoreHelper
 from facelib.utils.misc import is_gray
+from tqdm import tqdm
+from concurrent.futures import ThreadPoolExecutor
+import time
 
 from basicsr.utils.registry import ARCH_REGISTRY
 
@@ -52,6 +56,119 @@ def set_realesrgan():
                         category=RuntimeWarning)
     return upsampler
 
+
+def restore_face_and_upsampler(checkpoint, input_img_list, base_offest):
+    # ------------------ set up CodeFormer restorer -------------------
+    net = ARCH_REGISTRY.get('CodeFormer')(dim_embd=512, codebook_size=1024, n_head=8, n_layers=9,
+                                          connect_list=['32', '64', '128', '256']).to(device)
+    net.load_state_dict(checkpoint)
+    net.eval()
+
+    face_helper = FaceRestoreHelper(
+        args.upscale,
+        face_size=512,
+        crop_ratio=(1, 1),
+        det_model=args.detection_model,
+        save_ext='png',
+        use_parse=True,
+        device=device)
+
+    # -------------------- start to processing ---------------------
+    for i, img_path in tqdm(enumerate(input_img_list), desc="img list", total=len(input_img_list)):
+        # clean all the intermediate results to process the next image
+        face_helper.clean_all()
+        i += base_offest
+
+        if isinstance(img_path, str):
+            img_name = os.path.basename(img_path)
+            basename, ext = os.path.splitext(img_name)
+            print(f'[{i + 1}/{test_img_num}] Processing: {img_name}')
+            img = cv2.imread(img_path, cv2.IMREAD_COLOR)
+        else:  # for video processing
+            basename = str(i).zfill(6)
+            img_name = f'{video_name}_{basename}' if input_video else basename
+            print(f'[{i + 1}/{test_img_num}] Processing: {img_name}')
+            img = img_path
+
+        if args.has_aligned:
+            # the input faces are already cropped and aligned
+            img = cv2.resize(img, (512, 512), interpolation=cv2.INTER_LINEAR)
+            face_helper.is_gray = is_gray(img, threshold=10)
+            if face_helper.is_gray:
+                print('Grayscale input: True')
+            face_helper.cropped_faces = [img]
+        else:
+            face_helper.read_image(img)
+            # get face landmarks for each face
+            num_det_faces = face_helper.get_face_landmarks_5(
+                only_center_face=args.only_center_face, resize=640, eye_dist_threshold=5)
+            print(f'\tdetect {num_det_faces} faces')
+            # align and warp each face
+            face_helper.align_warp_face()
+
+        # face restoration for each cropped face
+        for idx, cropped_face in tqdm(enumerate(face_helper.cropped_faces), desc="faces restore", total=len(
+                face_helper.cropped_faces)):
+            # prepare data
+            cropped_face_t = img2tensor(cropped_face / 255., bgr2rgb=True, float32=True)
+            normalize(cropped_face_t, (0.5, 0.5, 0.5), (0.5, 0.5, 0.5), inplace=True)
+            cropped_face_t = cropped_face_t.unsqueeze(0).to(device)
+
+            try:
+                with torch.no_grad():
+                    output = net(cropped_face_t, w=w, adain=True)[0]
+                    restored_face = tensor2img(output, rgb2bgr=True, min_max=(-1, 1))
+                del output
+                torch.cuda.empty_cache()
+            except Exception as error:
+                print(f'\tFailed inference for CodeFormer: {error}')
+                restored_face = tensor2img(cropped_face_t, rgb2bgr=True, min_max=(-1, 1))
+
+            restored_face = restored_face.astype('uint8')
+            face_helper.add_restored_face(restored_face, cropped_face)
+
+        # paste_back
+        if not args.has_aligned:
+            # upsample the background
+            if bg_upsampler is not None:
+                # Now only support RealESRGAN for upsampling background
+                bg_img = bg_upsampler.enhance(img, outscale=args.upscale)[0]
+            else:
+                bg_img = None
+            face_helper.get_inverse_affine(None)
+            # paste each restored face to the input image
+            if args.face_upsample and face_upsampler is not None:
+                restored_img = face_helper.paste_faces_to_input_image(upsample_img=bg_img, draw_box=args.draw_box,
+                                                                      face_upsampler=face_upsampler)
+            else:
+                restored_img = face_helper.paste_faces_to_input_image(upsample_img=bg_img, draw_box=args.draw_box)
+
+        # save faces
+        for idx, (cropped_face, restored_face) in tqdm(
+                enumerate(zip(face_helper.cropped_faces, face_helper.restored_faces)), desc="save faces",
+                total=len(face_helper.cropped_faces)):
+            # save cropped face
+            if not args.has_aligned:
+                save_crop_path = os.path.join(result_root, 'cropped_faces', f'{basename}_{idx:02d}.png')
+                imwrite(cropped_face, save_crop_path)
+            # save restored face
+            if args.has_aligned:
+                save_face_name = f'{basename}.png'
+            else:
+                save_face_name = f'{basename}_{idx:02d}.png'
+            if args.suffix is not None:
+                save_face_name = f'{save_face_name[:-4]}_{args.suffix}.png'
+            save_restore_path = os.path.join(result_root, 'restored_faces', save_face_name)
+            imwrite(restored_face, save_restore_path)
+
+        # save restored img
+        if not args.has_aligned and restored_img is not None:
+            if args.suffix is not None:
+                basename = f'{basename}_{args.suffix}'
+            save_restore_path = os.path.join(result_root, 'final_results', f'{basename}.png')
+            imwrite(restored_img, save_restore_path)
+
+
 if __name__ == '__main__':
     # device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     device = get_device()
@@ -78,6 +195,7 @@ if __name__ == '__main__':
     parser.add_argument('--bg_tile', type=int, default=400, help='Tile size for background sampler. Default: 400')
     parser.add_argument('--suffix', type=str, default=None, help='Suffix of the restored faces. Default: None')
     parser.add_argument('--save_video_fps', type=float, default=None, help='Frame rate for saving video. Default: None')
+    parser.add_argument('--thread_count', type=int, default=1, help='Thread count for iamges calculating. Default: 1')
 
     args = parser.parse_args()
 
@@ -131,16 +249,10 @@ if __name__ == '__main__':
     else:
         face_upsampler = None
 
-    # ------------------ set up CodeFormer restorer -------------------
-    net = ARCH_REGISTRY.get('CodeFormer')(dim_embd=512, codebook_size=1024, n_head=8, n_layers=9, 
-                                            connect_list=['32', '64', '128', '256']).to(device)
-    
     # ckpt_path = 'weights/CodeFormer/codeformer.pth'
     ckpt_path = load_file_from_url(url=pretrain_model_url['restoration'], 
                                     model_dir='weights/CodeFormer', progress=True, file_name=None)
     checkpoint = torch.load(ckpt_path)['params_ema']
-    net.load_state_dict(checkpoint)
-    net.eval()
 
     # ------------------ set up FaceRestoreHelper -------------------
     # large det_model: 'YOLOv5l', 'retinaface_resnet50'
@@ -152,104 +264,23 @@ if __name__ == '__main__':
     else:
         print(f'Background upsampling: False, Face upsampling: {args.face_upsample}')
 
-    face_helper = FaceRestoreHelper(
-        args.upscale,
-        face_size=512,
-        crop_ratio=(1, 1),
-        det_model = args.detection_model,
-        save_ext='png',
-        use_parse=True,
-        device=device)
+    start_time = time.time()
 
-    # -------------------- start to processing ---------------------
-    for i, img_path in enumerate(input_img_list):
-        # clean all the intermediate results to process the next image
-        face_helper.clean_all()
-        
-        if isinstance(img_path, str):
-            img_name = os.path.basename(img_path)
-            basename, ext = os.path.splitext(img_name)
-            print(f'[{i+1}/{test_img_num}] Processing: {img_name}')
-            img = cv2.imread(img_path, cv2.IMREAD_COLOR)
-        else: # for video processing
-            basename = str(i).zfill(6)
-            img_name = f'{video_name}_{basename}' if input_video else basename
-            print(f'[{i+1}/{test_img_num}] Processing: {img_name}')
-            img = img_path
+    # concurrent
+    img_count = len(input_img_list)
+    thread_pool = ThreadPoolExecutor()
+    step = math.ceil(img_count / args.thread_count)
+    feature_list = []
+    for i in range(args.thread_count):
+        start = i * step
+        end = min((i + 1) * step, img_count)
+        feature = thread_pool.submit(restore_face_and_upsampler, checkpoint, input_img_list[start: end], start)
+        feature_list.append(feature)
 
-        if args.has_aligned: 
-            # the input faces are already cropped and aligned
-            img = cv2.resize(img, (512, 512), interpolation=cv2.INTER_LINEAR)
-            face_helper.is_gray = is_gray(img, threshold=10)
-            if face_helper.is_gray:
-                print('Grayscale input: True')
-            face_helper.cropped_faces = [img]
-        else:
-            face_helper.read_image(img)
-            # get face landmarks for each face
-            num_det_faces = face_helper.get_face_landmarks_5(
-                only_center_face=args.only_center_face, resize=640, eye_dist_threshold=5)
-            print(f'\tdetect {num_det_faces} faces')
-            # align and warp each face
-            face_helper.align_warp_face()
+    for feature in feature_list:
+        feature.result()
 
-        # face restoration for each cropped face
-        for idx, cropped_face in enumerate(face_helper.cropped_faces):
-            # prepare data
-            cropped_face_t = img2tensor(cropped_face / 255., bgr2rgb=True, float32=True)
-            normalize(cropped_face_t, (0.5, 0.5, 0.5), (0.5, 0.5, 0.5), inplace=True)
-            cropped_face_t = cropped_face_t.unsqueeze(0).to(device)
-
-            try:
-                with torch.no_grad():
-                    output = net(cropped_face_t, w=w, adain=True)[0]
-                    restored_face = tensor2img(output, rgb2bgr=True, min_max=(-1, 1))
-                del output
-                torch.cuda.empty_cache()
-            except Exception as error:
-                print(f'\tFailed inference for CodeFormer: {error}')
-                restored_face = tensor2img(cropped_face_t, rgb2bgr=True, min_max=(-1, 1))
-
-            restored_face = restored_face.astype('uint8')
-            face_helper.add_restored_face(restored_face, cropped_face)
-
-        # paste_back
-        if not args.has_aligned:
-            # upsample the background
-            if bg_upsampler is not None:
-                # Now only support RealESRGAN for upsampling background
-                bg_img = bg_upsampler.enhance(img, outscale=args.upscale)[0]
-            else:
-                bg_img = None
-            face_helper.get_inverse_affine(None)
-            # paste each restored face to the input image
-            if args.face_upsample and face_upsampler is not None: 
-                restored_img = face_helper.paste_faces_to_input_image(upsample_img=bg_img, draw_box=args.draw_box, face_upsampler=face_upsampler)
-            else:
-                restored_img = face_helper.paste_faces_to_input_image(upsample_img=bg_img, draw_box=args.draw_box)
-
-        # save faces
-        for idx, (cropped_face, restored_face) in enumerate(zip(face_helper.cropped_faces, face_helper.restored_faces)):
-            # save cropped face
-            if not args.has_aligned: 
-                save_crop_path = os.path.join(result_root, 'cropped_faces', f'{basename}_{idx:02d}.png')
-                imwrite(cropped_face, save_crop_path)
-            # save restored face
-            if args.has_aligned:
-                save_face_name = f'{basename}.png'
-            else:
-                save_face_name = f'{basename}_{idx:02d}.png'
-            if args.suffix is not None:
-                save_face_name = f'{save_face_name[:-4]}_{args.suffix}.png'
-            save_restore_path = os.path.join(result_root, 'restored_faces', save_face_name)
-            imwrite(restored_face, save_restore_path)
-
-        # save restored img
-        if not args.has_aligned and restored_img is not None:
-            if args.suffix is not None:
-                basename = f'{basename}_{args.suffix}'
-            save_restore_path = os.path.join(result_root, 'final_results', f'{basename}.png')
-            imwrite(restored_img, save_restore_path)
+    thread_pool.shutdown()
 
     # save enhanced video
     if input_video:
@@ -257,7 +288,7 @@ if __name__ == '__main__':
         # load images
         video_frames = []
         img_list = sorted(glob.glob(os.path.join(result_root, 'final_results', '*.[jp][pn]g')))
-        for img_path in img_list:
+        for img_path in tqdm(img_list):
             img = cv2.imread(img_path)
             video_frames.append(img)
         # write images to video
@@ -267,8 +298,9 @@ if __name__ == '__main__':
         save_restore_path = os.path.join(result_root, f'{video_name}.mp4')
         vidwriter = VideoWriter(save_restore_path, height, width, fps, audio)
          
-        for f in video_frames:
+        for f in tqdm(video_frames, desc="save video frames"):
             vidwriter.write_frame(f)
         vidwriter.close()
 
-    print(f'\nAll results are saved in {result_root}')
+    cost_time = time.time() - start_time
+    print('\nAll results are saved in {}, cost time:{:.2f}秒'.format(result_root, cost_time))
