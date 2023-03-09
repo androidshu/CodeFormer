@@ -2,6 +2,7 @@
 
 # ignored files
 version.py
+scripts/*oss*
 
 # ignored files with suffix
 *.html

@@ -12,11 +12,13 @@ from .logger import get_root_logger
 IS_HIGH_VERSION = [int(m) for m in list(re.findall(r"^([0-9]+)\.([0-9]+)\.([0-9]+)([^0-9][a-zA-Z0-9]*)?(\+git.*)?$",\
     torch.__version__)[0][:3])] >= [1, 12, 0]
 
+
 def gpu_is_available():
     if IS_HIGH_VERSION:
         if torch.backends.mps.is_available():
             return True
     return True if torch.cuda.is_available() and torch.backends.cudnn.is_available() else False
+
 
 def get_device(gpu_id=None):
     if gpu_id is None:
