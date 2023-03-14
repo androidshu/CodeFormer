@@ -176,7 +176,7 @@ def restore_face_and_upsampler(device, checkpoint, args, result_root, input_img_
                                                                       face_upsampler=face_upsampler)
             else:
                 restored_img = face_helper.paste_faces_to_input_image(upsample_img=bg_img, draw_box=args.draw_box)
-        print('\n paste cost time:{:.2f}秒, detect and crop time:{:.2f}秒'.format(time.time() - paste_start_time), detect_end_time - detect_start_time)
+        print('\n paste cost time:{:.2f}秒, detect and crop time:{:.2f}秒'.format(time.time() - paste_start_time, detect_end_time - detect_start_time))
         # save faces
         for idx, (cropped_face, restored_face) in enumerate(zip(face_helper.cropped_faces, face_helper.restored_faces)):
             # save cropped face
