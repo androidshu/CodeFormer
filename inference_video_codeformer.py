@@ -33,6 +33,8 @@ class VideoIterator:
 if __name__ == '__main__':
 
     args = inference_codeformer.parse_argument()
+    args.face_upsample = True
+    args.bg_upsampler = "realesrgan"
     # ------------------------ input & output ------------------------
     video_iterator = None
     video_reader = None
