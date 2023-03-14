@@ -33,8 +33,7 @@ class VideoIterator:
 if __name__ == '__main__':
 
     args = inference_codeformer.parse_argument()
-    args.face_upsample = True
-    args.bg_upsampler = "realesrgan"
+
     # ------------------------ input & output ------------------------
     video_iterator = None
     video_reader = None
@@ -43,6 +42,14 @@ if __name__ == '__main__':
 
         video_reader = VideoReader(args.input_path)
         video_iterator = VideoIterator(video_reader)
+        minWH = min(video_reader.width, video_reader.height)
+        if minWH <= 640:
+            args.face_upsample = True
+            args.bg_upsampler = "realesrgan"
+            args.upscale = 2
+            args.fidelity_weight = 1.0
+        else:
+            args.upscale = 1
 
         audio = video_reader.get_audio()
         fps = video_reader.get_fps() if args.save_video_fps is None else args.save_video_fps
