@@ -3,6 +3,8 @@ import os
 import cv2
 import argparse
 import glob
+
+import ffmpeg
 import torch
 from torchvision.transforms.functional import normalize
 from basicsr.utils import imwrite, img2tensor, tensor2img
@@ -21,7 +23,7 @@ pretrain_model_url = {
 }
 
 
-def set_realesrgan(device):
+def set_realesrgan(device, args):
 
     from basicsr.archs.rrdbnet_arch import RRDBNet
     from basicsr.utils.realesrgan_utils import RealESRGANer
@@ -60,7 +62,7 @@ def set_realesrgan(device):
     return upsampler
 
 
-def restore_face_and_upsampler(device, checkpoint, input_img_list, base_offest):
+def restore_face_and_upsampler(device, checkpoint, args, result_root, input_img_it, total_img_count, base_offest=0, img_base_name=None):
     # ------------------ set up CodeFormer restorer -------------------
     net = ARCH_REGISTRY.get('CodeFormer')(dim_embd=512, codebook_size=1024, n_head=8, n_layers=9,
                                           connect_list=['32', '64', '128', '256']).to(device)
@@ -78,7 +80,7 @@ def restore_face_and_upsampler(device, checkpoint, input_img_list, base_offest):
 
     # ------------------ set up background upsampler ------------------
     if args.bg_upsampler == 'realesrgan':
-        bg_upsampler = set_realesrgan(device)
+        bg_upsampler = set_realesrgan(device, args)
     else:
         bg_upsampler = None
 
@@ -87,7 +89,7 @@ def restore_face_and_upsampler(device, checkpoint, input_img_list, base_offest):
         if bg_upsampler is not None:
             face_upsampler = bg_upsampler
         else:
-            face_upsampler = set_realesrgan(device)
+            face_upsampler = set_realesrgan(device, args)
     else:
         face_upsampler = None
 
@@ -102,10 +104,11 @@ def restore_face_and_upsampler(device, checkpoint, input_img_list, base_offest):
         print(f'Background upsampling: False, Face upsampling: {args.face_upsample}')
 
     # -------------------- start to processing ---------------------
-    for i, img_path in tqdm(enumerate(input_img_list), desc="img list", total=len(input_img_list)):
+    i = base_offest
+    for img_path in tqdm(input_img_it, desc="img list", total=total_img_count):
         # clean all the intermediate results to process the next image
         face_helper.clean_all()
-        i += base_offest
+        i += 1
 
         if isinstance(img_path, str):
             img_name = os.path.basename(img_path)
@@ -114,8 +117,10 @@ def restore_face_and_upsampler(device, checkpoint, input_img_list, base_offest):
             img = cv2.imread(img_path, cv2.IMREAD_COLOR)
         else:  # for video processing
             basename = str(i).zfill(6)
-            img_name = f'{video_name}_{basename}' if input_video else basename
-            print(f'[{i + 1}/{test_img_num}] Processing: {img_name}')
+            img_name = basename
+            if img_base_name is not None:
+                img_name = f'{img_base_name}_{basename}'
+            print(f'[{i + 1}] Processing: {img_name}')
             img = img_path
 
         if args.has_aligned:
@@ -143,7 +148,7 @@ def restore_face_and_upsampler(device, checkpoint, input_img_list, base_offest):
 
             try:
                 with torch.no_grad():
-                    output = net(cropped_face_t, w=w, adain=True)[0]
+                    output = net(cropped_face_t, w=args.fidelity_weight, adain=True)[0]
                     restored_face = tensor2img(output, rgb2bgr=True, min_max=(-1, 1))
                 del output
                 torch.cuda.empty_cache()
@@ -187,7 +192,6 @@ def restore_face_and_upsampler(device, checkpoint, input_img_list, base_offest):
             save_restore_path = os.path.join(result_root, 'restored_faces', save_face_name)
             imwrite(restored_face, save_restore_path)
 
-
         # save restored img
         if not args.has_aligned and restored_img is not None:
             if args.suffix is not None:
@@ -196,17 +200,16 @@ def restore_face_and_upsampler(device, checkpoint, input_img_list, base_offest):
             imwrite(restored_img, save_restore_path)
 
 
-if __name__ == '__main__':
-    # device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+def parse_argument():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('-i', '--input_path', type=str, default='./inputs/whole_imgs', 
+    parser.add_argument('-i', '--input_path', type=str, default='./inputs/whole_imgs',
             help='Input image, video or folder. Default: inputs/whole_imgs')
-    parser.add_argument('-o', '--output_path', type=str, default=None, 
+    parser.add_argument('-o', '--output_path', type=str, default=None,
             help='Output folder. Default: results/<input_name>_<w>')
-    parser.add_argument('-w', '--fidelity_weight', type=float, default=0.5, 
+    parser.add_argument('-w', '--fidelity_weight', type=float, default=0.5,
             help='Balance the quality and fidelity. Default: 0.5')
-    parser.add_argument('-s', '--upscale', type=int, default=2, 
+    parser.add_argument('-s', '--upscale', type=int, default=2,
             help='The final upsampling scale of the image. Default: 2')
     parser.add_argument('--has_aligned', action='store_true', help='Input are cropped and aligned faces. Default: False')
     parser.add_argument('--only_center_face', action='store_true', help='Only restore the center face. Default: False')
@@ -224,10 +227,35 @@ if __name__ == '__main__':
     parser.add_argument('--thread_count', type=int, default=1, help='Thread count for iamges calculating. Default: 1')
 
     args = parser.parse_args()
+    return args
+
+
+def save_as_video(result_root):
+    # load images
+    img_list = sorted(glob.glob(os.path.join(result_root, 'final_results', '*.[jp][pn]g')))
+    if len(img_list) > 0:
+        print('Video Saving...')
+        img = cv2.imread(img_list[0])
+        height, width = img.shape[:2]
+        if args.suffix is not None:
+            video_name = f'{video_name}_{args.suffix}.png'
+        save_restore_path = os.path.join(result_root, f'{video_name}.mp4')
+        vidwriter = VideoWriter(save_restore_path, height, width, fps, audio)
+
+        for img_path in img_list:
+            # write images to video
+            img = cv2.imread(img_path)
+            vidwriter.write_frame(img)
+        vidwriter.close()
+
+
+if __name__ == '__main__':
+    # device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    args = parse_argument()
 
     # ------------------------ input & output ------------------------
-    w = args.fidelity_weight
     input_video = False
+    video_name = None
     if args.input_path.endswith(('jpg', 'jpeg', 'png', 'JPG', 'JPEG', 'PNG')): # input single img path
         input_img_list = [args.input_path]
         result_root = f'results/test_img_{w}'
@@ -241,8 +269,8 @@ if __name__ == '__main__':
             image = vidreader.get_frame()
         audio = vidreader.get_audio()
         fps = vidreader.get_fps() if args.save_video_fps is None else args.save_video_fps   
-        video_name = os.path.basename(args.input_path)[:-4]
-        result_root = f'results/{video_name}_{w}'
+        video_name = os.path.basename(args.input_path).split(".")[0]
+        result_root = f'results/{video_name}_{args.fidelity_weight}'
         input_video = True
         vidreader.close()
     else: # input img folder
@@ -250,7 +278,7 @@ if __name__ == '__main__':
             args.input_path = args.input_path[:-1]
         # scan all the jpg and png images
         input_img_list = sorted(glob.glob(os.path.join(args.input_path, '*.[jpJP][pnPN]*[gG]')))
-        result_root = f'results/{os.path.basename(args.input_path)}_{w}'
+        result_root = f'results/{os.path.basename(args.input_path)}_{args.fidelity_weight}'
 
     if not args.output_path is None: # set output path
         result_root = args.output_path
@@ -259,7 +287,6 @@ if __name__ == '__main__':
     if test_img_num == 0:
         raise FileNotFoundError('No input image/video is found...\n' 
             '\tNote that --input_path for video should end with .mp4|.mov|.avi')
-
 
     # ckpt_path = 'weights/CodeFormer/codeformer.pth'
     ckpt_path = load_file_from_url(url=pretrain_model_url['restoration'], 
@@ -271,14 +298,18 @@ if __name__ == '__main__':
     img_count = len(input_img_list)
     thread_pool = ThreadPoolExecutor()
     cuda_count = torch.cuda.device_count()
+    cuda_count = 1
     if cuda_count > 1:
-        step = math.ceil(img_count / args.thread_count)
+        step = math.ceil(img_count / cuda_count)
         feature_list = []
         for i in range(cuda_count):
             device = get_device(i)
             start = i * step
-            end = min((i + 1) * step, img_count)
-            feature = thread_pool.submit(restore_face_and_upsampler, device, checkpoint, input_img_list[start: end], start)
+            end = (i + 1) * step
+            if end > img_count:
+                end = img_count
+            print(f"cuda device:{device}, img_count:{img_count}, start:{start}, end:{end}")
+            feature = thread_pool.submit(restore_face_and_upsampler, device, checkpoint, args, result_root, iter(input_img_list[start: end]), total_img_count=end-start, base_offest=start)
             feature_list.append(feature)
 
         for feature in feature_list:
@@ -287,27 +318,11 @@ if __name__ == '__main__':
         thread_pool.shutdown()
     else:
         device = get_device()
-        restore_face_and_upsampler(device, checkpoint, input_img_list, 0)
+        restore_face_and_upsampler(device, checkpoint, args, result_root, iter(input_img_list), total_img_count=len(input_img_list), base_offest=0, img_base_name=video_name)
 
     # save enhanced video
     if input_video:
-
-        # load images
-        img_list = sorted(glob.glob(os.path.join(result_root, 'final_results', '*.[jp][pn]g')))
-        if len(img_list) > 0:
-            print('Video Saving...')
-            img = cv2.imread(img_list[0])
-            height, width = img.shape[:2]
-            if args.suffix is not None:
-                video_name = f'{video_name}_{args.suffix}.png'
-            save_restore_path = os.path.join(result_root, f'{video_name}.mp4')
-            vidwriter = VideoWriter(save_restore_path, height, width, fps, audio)
-
-            for img_path in img_list:
-                # write images to video
-                img = cv2.imread(img_path)
-                vidwriter.write_frame(img)
-            vidwriter.close()
+        save_as_video(result_root)
 
     cost_time = time.time() - start_time
     print('\nAll results are saved in {}, cost time:{:.2f}秒'.format(result_root, cost_time))

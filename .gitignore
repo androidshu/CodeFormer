@@ -94,6 +94,7 @@ target/
 
 # pyenv
 .python-version
+/conda_envs
 
 # celery beat schedule file
 celerybeat-schedule
@@ -126,4 +127,4 @@ venv.bak/
 # project
 results/
 *_old*
-
+temp/
