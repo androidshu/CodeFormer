@@ -123,6 +123,7 @@ def restore_face_and_upsampler(device, checkpoint, args, result_root, input_img_
             print(f'[{i + 1}] Processing: {img_name}')
             img = img_path
 
+        detect_start_time = time.time()
         if args.has_aligned:
             # the input faces are already cropped and aligned
             img = cv2.resize(img, (512, 512), interpolation=cv2.INTER_LINEAR)
@@ -138,7 +139,7 @@ def restore_face_and_upsampler(device, checkpoint, args, result_root, input_img_
             print(f'\tdetect {num_det_faces} faces')
             # align and warp each face
             face_helper.align_warp_face()
-
+        detect_end_time = time.time()
         # face restoration for each cropped face
         for idx, cropped_face in enumerate(face_helper.cropped_faces):
             # prepare data
@@ -175,7 +176,7 @@ def restore_face_and_upsampler(device, checkpoint, args, result_root, input_img_
                                                                       face_upsampler=face_upsampler)
             else:
                 restored_img = face_helper.paste_faces_to_input_image(upsample_img=bg_img, draw_box=args.draw_box)
-        print('\n paste cost time:{:.2f}秒'.format(time.time() - paste_start_time))
+        print('\n paste cost time:{:.2f}秒, detect and crop time:{:.2f}秒'.format(time.time() - paste_start_time), detect_end_time - detect_start_time)
         # save faces
         for idx, (cropped_face, restored_face) in enumerate(zip(face_helper.cropped_faces, face_helper.restored_faces)):
             # save cropped face
