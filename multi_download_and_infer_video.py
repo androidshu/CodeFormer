@@ -6,12 +6,12 @@ import ffmpeg
 
 from tqdm import tqdm
 
-import inference_video_codeformer
+import video_inference_codeformer
 
 
 def convert_url_to_path(url, file_dir='temp'):
     md5 = hashlib.md5(url.encode()).hexdigest()
-    basename = os.path.basename(url)
+    basename = os.path.basename(url).split("?")[0]
     name = md5 + "_" + basename
 
     current_dir = os.path.dirname(sys.argv[0])
@@ -22,7 +22,7 @@ def convert_url_to_path(url, file_dir='temp'):
 
 
 def download_to_path(url, file_path):
-    command = f"ffmpeg -i {url} {file_path}"
+    command = f'ffmpeg -i "{url}" "{file_path}"'
     print(f"down video file, command:{command}")
     os.system(command)
 
@@ -44,6 +44,6 @@ if __name__ == '__main__':
         if not os.path.exists(path):
             print(f'handle video failed, file path:{path} not exists.')
             continue
-        os.system(f"python inference_video_codeformer.py --bg_upsampler realesrgan --face_upsample -w 1.0 --input_path {path}")
+        # os.system(f"python video_inference_codeformer.py --bg_upsampler realesrgan --face_upsample -w 1.0 --input_path {path}")
 
 

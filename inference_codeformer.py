@@ -217,7 +217,7 @@ def parse_argument():
     parser.add_argument('--draw_box', action='store_true', help='Draw the bounding box for the detected faces. Default: False')
     # large det_model: 'YOLOv5l', 'retinaface_resnet50'
     # small det_model: 'YOLOv5n', 'retinaface_mobile0.25'
-    parser.add_argument('--detection_model', type=str, default='retinaface_resnet50',
+    parser.add_argument('--detection_model', type=str, default='retinaface_mobile0.25',
             help='Face detector. Optional: retinaface_resnet50, retinaface_mobile0.25, YOLOv5l, YOLOv5n, dlib. \
                 Default: retinaface_resnet50')
     parser.add_argument('--bg_upsampler', type=str, default='None', help='Background upsampler. Optional: realesrgan')
