@@ -22,7 +22,7 @@ def convert_url_to_path(url, file_dir='temp'):
 
 
 def download_to_path(url, file_path):
-    command = f'ffmpeg -i "{url}" "{file_path}"'
+    command = f'ffmpeg -i "{url}" -codec copy "{file_path}"'
     print(f"down video file, command:{command}")
     os.system(command)
 
