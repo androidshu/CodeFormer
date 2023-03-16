@@ -139,7 +139,8 @@ def restore_face_and_upsampler(device, checkpoint, args, result_root, input_img_
             print(f'\tdetect {num_det_faces} faces')
             # align and warp each face
             face_helper.align_warp_face()
-        detect_end_time = time.time()
+        face_restore_start_time = detect_end_time = time.time()
+
         # face restoration for each cropped face
         for idx, cropped_face in enumerate(face_helper.cropped_faces):
             # prepare data
@@ -160,7 +161,7 @@ def restore_face_and_upsampler(device, checkpoint, args, result_root, input_img_
             restored_face = restored_face.astype('uint8')
             face_helper.add_restored_face(restored_face, cropped_face)
 
-        paste_start_time = time.time()
+        face_restore_end_time = paste_start_time = time.time()
         # paste_back
         if not args.has_aligned:
             # upsample the background
@@ -176,22 +177,23 @@ def restore_face_and_upsampler(device, checkpoint, args, result_root, input_img_
                                                                       face_upsampler=face_upsampler)
             else:
                 restored_img = face_helper.paste_faces_to_input_image(upsample_img=bg_img, draw_box=args.draw_box)
-        print('\n paste cost time:{:.2f}秒, detect and crop time:{:.2f}秒'.format(time.time() - paste_start_time, detect_end_time - detect_start_time))
-        # save faces
-        for idx, (cropped_face, restored_face) in enumerate(zip(face_helper.cropped_faces, face_helper.restored_faces)):
-            # save cropped face
-            if not args.has_aligned:
-                save_crop_path = os.path.join(result_root, 'cropped_faces', f'{basename}_{idx:02d}.png')
-                imwrite(cropped_face, save_crop_path)
-            # save restored face
-            if args.has_aligned:
-                save_face_name = f'{basename}.png'
-            else:
-                save_face_name = f'{basename}_{idx:02d}.png'
-            if args.suffix is not None:
-                save_face_name = f'{save_face_name[:-4]}_{args.suffix}.png'
-            save_restore_path = os.path.join(result_root, 'restored_faces', save_face_name)
-            imwrite(restored_face, save_restore_path)
+
+        save_start_time = paste_end_time = time.time()
+        # # save faces
+        # for idx, (cropped_face, restored_face) in enumerate(zip(face_helper.cropped_faces, face_helper.restored_faces)):
+        #     # save cropped face
+        #     if not args.has_aligned:
+        #         save_crop_path = os.path.join(result_root, 'cropped_faces', f'{basename}_{idx:02d}.png')
+        #         imwrite(cropped_face, save_crop_path)
+        #     # save restored face
+        #     if args.has_aligned:
+        #         save_face_name = f'{basename}.png'
+        #     else:
+        #         save_face_name = f'{basename}_{idx:02d}.png'
+        #     if args.suffix is not None:
+        #         save_face_name = f'{save_face_name[:-4]}_{args.suffix}.png'
+        #     save_restore_path = os.path.join(result_root, 'restored_faces', save_face_name)
+        #     imwrite(restored_face, save_restore_path)
 
         # save restored img
         if not args.has_aligned and restored_img is not None:
@@ -199,6 +201,10 @@ def restore_face_and_upsampler(device, checkpoint, args, result_root, input_img_
                 basename = f'{basename}_{args.suffix}'
             save_restore_path = os.path.join(result_root, 'final_results', f'{basename}.png')
             imwrite(restored_img, save_restore_path)
+
+        print('\ndetect and crop time:{:.2f}秒, face restore time:{:.2f}秒, paste and vsr cost time:{:.2f}秒, save img time:{:.2f}秒'.format(
+            detect_end_time - detect_start_time, face_restore_end_time - face_restore_start_time,
+            paste_end_time - paste_start_time, time.time() - save_start_time))
 
 
 def parse_argument():
