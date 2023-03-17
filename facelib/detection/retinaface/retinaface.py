@@ -196,7 +196,7 @@ class RetinaFace(nn.Module):
         self,
         image,
         conf_threshold=0.8,
-        nms_threshold=0.4,
+        nms_threshold=0.5,
         use_origin_size=True,
     ):
         """
@@ -308,7 +308,7 @@ class RetinaFace(nn.Module):
 
         return frames, resize
 
-    def batched_detect_faces(self, frames, conf_threshold=0.8, nms_threshold=0.4, use_origin_size=True):
+    def batched_detect_faces(self, frames, conf_threshold=0.8, nms_threshold=0.5, use_origin_size=True):
         """
         Arguments:
             frames: a list of PIL.Image, or np.array(shape=[n, h, w, c],

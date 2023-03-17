@@ -141,6 +141,7 @@ class FaceRestoreHelper(object):
             img = img[:, :, 0:3]
 
         self.input_img = img
+        self.base_scale = 1
         self.is_gray = is_gray(img, threshold=10)
         if self.is_gray:
             print('Grayscale input: True')
@@ -159,6 +160,7 @@ class FaceRestoreHelper(object):
                 width = max_length
 
             self.input_img = cv2.resize(self.input_img, (width, height), interpolation=cv2.INTER_LINEAR)
+            self.base_scale = scale
 
     def init_dlib(self, detection_path, landmark5_path):
         """Initialize the dlib detectors and predictors."""
@@ -234,10 +236,13 @@ class FaceRestoreHelper(object):
 
         for bbox in bboxes:
             # remove faces with too small eye distance: side faces or too small faces
-            eye_dist = np.linalg.norm([bbox[6] - bbox[8], bbox[7] - bbox[9]])
-            if eye_dist_threshold is not None and (eye_dist < eye_dist_threshold):
+            eye_dist = np.linalg.norm([bbox[5] - bbox[7], bbox[6] - bbox[8]])
+            # print(f'\neye_dist:{eye_dist}')
+            if eye_dist_threshold is not None and (eye_dist < eye_dist_threshold * self.base_scale):
                 continue
-
+            # left_eye_to_noise = np.linalg.norm([bbox[5] - bbox[13], bbox[6] - bbox[14]])
+            # right_eye_to_noise = np.linalg.norm([bbox[7] - bbox[13], bbox[8] - bbox[14]])
+            # print(f'\nleft_eye_to_noise:{left_eye_to_noise}, right_eye_to_noise:{right_eye_to_noise}')
             if self.template_3points:
                 landmark = np.array([[bbox[i], bbox[i + 1]] for i in range(5, 11, 2)])
             else:
