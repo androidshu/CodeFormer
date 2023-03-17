@@ -37,6 +37,7 @@ if __name__ == '__main__':
         url = url.replace("\n", '').replace("\r", '')
         path = url
 
+        url_list = url_list
         if url.startswith("http://") or url.startswith("https://"):
             path = convert_url_to_path(url)
             if not os.path.exists(path):
@@ -44,6 +45,7 @@ if __name__ == '__main__':
         if not os.path.exists(path):
             print(f'handle video failed, file path:{path} not exists.')
             continue
-        # os.system(f"python video_inference_codeformer.py --bg_upsampler realesrgan --face_upsample -w 1.0 --input_path {path}")
+
+        os.system(f"python video_inference_codeformer.py --input_path {path}")
 
 

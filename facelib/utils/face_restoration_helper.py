@@ -145,9 +145,20 @@ class FaceRestoreHelper(object):
         if self.is_gray:
             print('Grayscale input: True')
 
-        if min(self.input_img.shape[:2])<512:
-            f = 512.0/min(self.input_img.shape[:2])
-            self.input_img = cv2.resize(self.input_img, (0,0), fx=f, fy=f, interpolation=cv2.INTER_LINEAR)
+        if min(self.input_img.shape[:2]) < 512:
+            scale = 512.0/min(self.input_img.shape[:2])
+
+            width = height = 512
+            max_length = int(scale * max(self.input_img.shape[:2]))
+            if max_length % 2 == 1:
+                max_length += 1
+
+            if self.input_img.shape[0] > self.input_img.shape[1]:
+                height = max_length
+            else:
+                width = max_length
+
+            self.input_img = cv2.resize(self.input_img, (width, height), interpolation=cv2.INTER_LINEAR)
 
     def init_dlib(self, detection_path, landmark5_path):
         """Initialize the dlib detectors and predictors."""
@@ -399,7 +410,6 @@ class FaceRestoreHelper(object):
                 inverse_affine[:, 2] += extra_offset
                 face_size = self.face_size
             inv_restored = cv2.warpAffine(restored_face, inverse_affine, (w_up, h_up))
-
             # if draw_box or not self.use_parse:  # use square parse maps
             #     mask = np.ones(face_size, dtype=np.float32)
             #     inv_mask = cv2.warpAffine(mask, inverse_affine, (w_up, h_up))

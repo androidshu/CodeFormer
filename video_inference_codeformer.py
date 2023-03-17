@@ -37,6 +37,8 @@ if __name__ == '__main__':
     # ------------------------ input & output ------------------------
     video_iterator = None
     video_reader = None
+    fps = None
+    audio = None
     if args.input_path.lower().endswith(('.mp4', '.mov', '.avi', '.m3u8', '.m3u')): # input video path
         from basicsr.utils.video_util import VideoReader, VideoWriter
 
@@ -95,10 +97,9 @@ if __name__ == '__main__':
     device = get_device()
     inference_codeformer.restore_face_and_upsampler(device, checkpoint, args, result_root, iter(video_iterator), total_img_count=video_reader.nb_frames, img_base_name=video_name)
 
+    inference_codeformer.save_as_video(args, result_root, video_name, fps, audio)
     if video_reader is not None:
         video_reader.close()
-
-    inference_codeformer.save_as_video(result_root)
 
     cost_time = time.time() - start_time
     print('\nAll results are saved in {}, cost time:{:.2f}秒'.format(result_root, cost_time))

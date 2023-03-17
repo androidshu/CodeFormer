@@ -109,6 +109,8 @@ def restore_face_and_upsampler(device, checkpoint, args, result_root, input_img_
         # clean all the intermediate results to process the next image
         face_helper.clean_all()
         i += 1
+        if img_path is None:
+            break
 
         if isinstance(img_path, str):
             img_name = os.path.basename(img_path)
@@ -125,6 +127,7 @@ def restore_face_and_upsampler(device, checkpoint, args, result_root, input_img_
 
         detect_start_time = time.time()
         if args.has_aligned:
+
             # the input faces are already cropped and aligned
             img = cv2.resize(img, (512, 512), interpolation=cv2.INTER_LINEAR)
             face_helper.is_gray = is_gray(img, threshold=10)
@@ -237,10 +240,11 @@ def parse_argument():
     return args
 
 
-def save_as_video(result_root):
+def save_as_video(args, result_root, video_name, fps, audio):
     # load images
     img_list = sorted(glob.glob(os.path.join(result_root, 'final_results', '*.[jp][pn]g')))
     if len(img_list) > 0:
+        from basicsr.utils.video_util import VideoWriter
         print('Video Saving...')
         img = cv2.imread(img_list[0])
         height, width = img.shape[:2]
@@ -263,6 +267,8 @@ if __name__ == '__main__':
     # ------------------------ input & output ------------------------
     input_video = False
     video_name = None
+    fps = None
+    audio = None
     if args.input_path.endswith(('jpg', 'jpeg', 'png', 'JPG', 'JPEG', 'PNG')): # input single img path
         input_img_list = [args.input_path]
         result_root = f'results/test_img_{w}'
@@ -305,6 +311,7 @@ if __name__ == '__main__':
     img_count = len(input_img_list)
     thread_pool = ThreadPoolExecutor()
     cuda_count = torch.cuda.device_count()
+    print(f"cuda_count:{cuda_count}")
     cuda_count = 1
     if cuda_count > 1:
         step = math.ceil(img_count / cuda_count)
@@ -325,11 +332,12 @@ if __name__ == '__main__':
         thread_pool.shutdown()
     else:
         device = get_device()
+        torch.backends.cudnn.benchmark = True
         restore_face_and_upsampler(device, checkpoint, args, result_root, iter(input_img_list), total_img_count=len(input_img_list), base_offest=0, img_base_name=video_name)
 
     # save enhanced video
     if input_video:
-        save_as_video(result_root)
+        save_as_video(args, result_root, video_name, fps, audio)
 
     cost_time = time.time() - start_time
     print('\nAll results are saved in {}, cost time:{:.2f}秒'.format(result_root, cost_time))
