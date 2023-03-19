@@ -1,3 +1,4 @@
+import collections
 import math
 import os
 import cv2
@@ -13,6 +14,7 @@ from facelib.utils.misc import is_gray
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor
 import time
+from collections import deque
 
 from basicsr.utils.registry import ARCH_REGISTRY
 import inference_codeformer
@@ -63,7 +65,6 @@ if __name__ == '__main__':
 
     if not args.output_path is None: # set output path
         result_root = args.output_path
-
     # test_img_num = len(input_img_list)
     # if test_img_num == 0:
     #     raise FileNotFoundError('No input image/video is found...\n'
@@ -74,6 +75,7 @@ if __name__ == '__main__':
                                     model_dir='weights/CodeFormer', progress=True, file_name=None)
     checkpoint = torch.load(ckpt_path)['params_ema']
     start_time = time.time()
+    restore_img_dqueue = collections.deque()
     print("start")
     # # concurrent
     # img_count = len(input_img_list)
@@ -86,7 +88,7 @@ if __name__ == '__main__':
     #         device = get_device(i)
     #         start = i * step
     #         end = min((i + 1) * step, img_count)
-    #         feature = thread_pool.submit(restore_face_and_upsampler, device, checkpoint, input_img_list[start: end], start)
+    #         feature = thread_pool.submit(restore_face_and_upsampler, device, checkpoint, input_img_list[start: end], start, restore_img_dqueue=restore_img_dqueue)
     #         feature_list.append(feature)
     #
     #     for feature in feature_list:
@@ -95,11 +97,14 @@ if __name__ == '__main__':
     #     thread_pool.shutdown()
     # else:
     device = get_device()
-    inference_codeformer.restore_face_and_upsampler(device, checkpoint, args, result_root, iter(video_iterator), total_img_count=video_reader.nb_frames, img_base_name=video_name)
+    # torch.backends.cudnn.benchmark = True
+    thread_pool = ThreadPoolExecutor()
+    video_save_feature = thread_pool.submit(inference_codeformer.save_as_video_async, args, result_root, video_name, fps, audio, restore_img_dqueue)
 
-    inference_codeformer.save_as_video(args, result_root, video_name, fps, audio)
+    inference_codeformer.restore_face_and_upsampler(device, checkpoint, args, result_root, iter(video_iterator), total_img_count=video_reader.nb_frames, img_base_name=video_name, restore_img_dqueue=restore_img_dqueue)
+    video_save_feature.result()
     if video_reader is not None:
         video_reader.close()
-
-    cost_time = time.time() - start_time
-    print('\nAll results are saved in {}, cost time:{:.2f}秒'.format(result_root, cost_time))
+    thread_pool.shutdown()
+    end_time = time.time()
+    print('\nAll results are saved in {}, all cost time:{:.2f}秒'.format(result_root, end_time - start_time))

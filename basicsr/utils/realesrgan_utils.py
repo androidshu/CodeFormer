@@ -5,6 +5,7 @@ import os
 import queue
 import threading
 import torch
+import time
 from torch.nn import functional as F
 from basicsr.utils.download_util import load_file_from_url
 from basicsr.utils.misc import get_device
@@ -175,6 +176,7 @@ class RealESRGANer():
 
     @torch.no_grad()
     def enhance(self, img, outscale=None, alpha_upsampler='realesrgan'):
+        bg_enhance_start_time = bg_end1 = bg_end2 = bg_end3 = bg_end4 = time.time()
         h_input, w_input = img.shape[0:2]
         # img: numpy
         img = img.astype(np.float32)
@@ -201,18 +203,22 @@ class RealESRGANer():
         # ------------------- process image (without the alpha channel) ------------------- #
         try:
             with torch.no_grad():
+                bg_end1 = time.time()
                 self.pre_process(img)
+                bg_end2 = time.time()
                 if self.tile_size > 0:
                     self.tile_process()
                 else:
                     self.process()
+                bg_end3 = time.time()
                 output_img_t = self.post_process()
+                bg_end4 = time.time()
                 output_img = output_img_t.data.squeeze().float().cpu().clamp_(0, 1).numpy()
                 output_img = np.transpose(output_img[[2, 1, 0], :, :], (1, 2, 0))
                 if img_mode == 'L':
                     output_img = cv2.cvtColor(output_img, cv2.COLOR_BGR2GRAY)
             del output_img_t
-            torch.cuda.empty_cache()        
+            torch.cuda.empty_cache()
         except RuntimeError as error:
             print(f"Failed inference for RealESRGAN: {error}")      
 
@@ -249,6 +255,9 @@ class RealESRGANer():
                     int(h_input * outscale),
                 ), interpolation=cv2.INTER_LANCZOS4)
 
+        bg_enhance_end_time = time.time()
+        print("bg enhanced time:{:.3f}, end1:{:.3f}秒,end2:{:.3f}秒,end3:{:.3f}秒,end4:{:.3f}秒".format(bg_enhance_end_time - bg_enhance_start_time,
+                                                                                                          bg_end1 - bg_enhance_start_time, bg_end2 - bg_end1, bg_end3 - bg_end2, bg_end4 - bg_end3))
         return output, img_mode
 
 

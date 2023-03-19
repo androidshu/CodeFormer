@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 import os
 import torch
+import time
 from torchvision.transforms.functional import normalize
 
 from facelib.detection import init_detection_model
@@ -234,11 +235,12 @@ class FaceRestoreHelper(object):
         else:
             bboxes = bboxes / scale
 
+        eye_threshold = eye_dist_threshold * self.base_scale
         for bbox in bboxes:
             # remove faces with too small eye distance: side faces or too small faces
             eye_dist = np.linalg.norm([bbox[5] - bbox[7], bbox[6] - bbox[8]])
-            # print(f'\neye_dist:{eye_dist}')
-            if eye_dist_threshold is not None and (eye_dist < eye_dist_threshold * self.base_scale):
+            print(f'\neye_dist:{eye_dist}, eye_threshold:{eye_threshold}')
+            if eye_dist_threshold is not None and (eye_dist < eye_threshold):
                 continue
             # left_eye_to_noise = np.linalg.norm([bbox[5] - bbox[13], bbox[6] - bbox[14]])
             # right_eye_to_noise = np.linalg.norm([bbox[7] - bbox[13], bbox[8] - bbox[14]])
@@ -386,6 +388,7 @@ class FaceRestoreHelper(object):
 
 
     def paste_faces_to_input_image(self, save_path=None, upsample_img=None, draw_box=False, face_upsampler=None):
+        face_enhance_start_time = face_end1 = face_end2 = face_end3 = face_end4 = time.time()
         h, w, _ = self.input_img.shape
         h_up, w_up = int(h * self.upscale_factor), int(w * self.upscale_factor)
 
@@ -398,9 +401,11 @@ class FaceRestoreHelper(object):
 
         assert len(self.restored_faces) == len(
             self.inverse_affine_matrices), ('length of restored_faces and affine_matrices are different.')
-        
+
+
         inv_mask_borders = []
         for restored_face, inverse_affine in zip(self.restored_faces, self.inverse_affine_matrices):
+
             if face_upsampler is not None:
                 restored_face = face_upsampler.enhance(restored_face, outscale=self.upscale_factor)[0]
                 inverse_affine /= self.upscale_factor
@@ -414,7 +419,9 @@ class FaceRestoreHelper(object):
                     extra_offset = 0
                 inverse_affine[:, 2] += extra_offset
                 face_size = self.face_size
+
             inv_restored = cv2.warpAffine(restored_face, inverse_affine, (w_up, h_up))
+
             # if draw_box or not self.use_parse:  # use square parse maps
             #     mask = np.ones(face_size, dtype=np.float32)
             #     inv_mask = cv2.warpAffine(mask, inverse_affine, (w_up, h_up))
@@ -475,8 +482,12 @@ class FaceRestoreHelper(object):
                 face_input = img2tensor(face_input.astype('float32') / 255., bgr2rgb=True, float32=True)
                 normalize(face_input, (0.5, 0.5, 0.5), (0.5, 0.5, 0.5), inplace=True)
                 face_input = torch.unsqueeze(face_input, 0).to(self.device)
+
+                face_end1 = time.time()
                 with torch.no_grad():
                     out = self.face_parse(face_input)[0]
+
+                face_end2 = time.time()
                 out = out.argmax(dim=1).squeeze().cpu().numpy()
 
                 parse_mask = np.zeros(out.shape)
@@ -501,13 +512,15 @@ class FaceRestoreHelper(object):
                 fuse_mask = (inv_soft_parse_mask<inv_soft_mask).astype('int')
                 inv_soft_mask = inv_soft_parse_mask*fuse_mask + inv_soft_mask*(1-fuse_mask)
 
+                face_end3 = time.time()
+
             if len(upsample_img.shape) == 3 and upsample_img.shape[2] == 4:  # alpha channel
                 alpha = upsample_img[:, :, 3:]
                 upsample_img = inv_soft_mask * pasted_face + (1 - inv_soft_mask) * upsample_img[:, :, 0:3]
                 upsample_img = np.concatenate((upsample_img, alpha), axis=2)
             else:
                 upsample_img = inv_soft_mask * pasted_face + (1 - inv_soft_mask) * upsample_img
-
+        face_end4 = time.time()
         if np.max(upsample_img) > 256:  # 16-bit image
             upsample_img = upsample_img.astype(np.uint16)
         else:
@@ -528,6 +541,9 @@ class FaceRestoreHelper(object):
             path = os.path.splitext(save_path)[0]
             save_path = f'{path}.{self.save_ext}'
             imwrite(upsample_img, save_path)
+        face_enhance_end_time = time.time()
+        print("face enhanced time:{:.3f}, end1:{:.3f}秒,end2:{:.3f}秒,end3:{:.3f}秒,end4:{:.3f}秒".format(face_enhance_end_time - face_enhance_start_time,
+                                                                                                          face_end1 - face_enhance_start_time, face_end2 - face_end1, face_end3 - face_end2, face_end4 - face_end3))
         return upsample_img
 
     def clean_all(self):
