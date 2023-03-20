@@ -393,10 +393,11 @@ class FaceRestoreHelper(object):
         h_up, w_up = int(h * self.upscale_factor), int(w * self.upscale_factor)
 
         if upsample_img is None:
+            upsample_img = self.input_img
+
+        if self.upscale_factor > 1:
             # simply resize the background
             # upsample_img = cv2.resize(self.input_img, (w_up, h_up), interpolation=cv2.INTER_LANCZOS4)
-            upsample_img = cv2.resize(self.input_img, (w_up, h_up), interpolation=cv2.INTER_LINEAR)
-        else:
             upsample_img = cv2.resize(upsample_img, (w_up, h_up), interpolation=cv2.INTER_LANCZOS4)
 
         assert len(self.restored_faces) == len(
