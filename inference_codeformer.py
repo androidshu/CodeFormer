@@ -76,7 +76,7 @@ def restore_face_and_upsampler(device, checkpoint, args, result_root, input_img_
     net.eval()
 
     face_helper = FaceRestoreHelper(
-        1,
+        args.upscale,
         face_size=512,
         crop_ratio=(1, 1),
         det_model=args.detection_model,
@@ -194,19 +194,18 @@ def restore_face_and_upsampler(device, checkpoint, args, result_root, input_img_
                 # Now only support RealESRGAN for upsampling background
                 bg_img = bg_upsampler.enhance(img, outscale=args.upscale)[0]
             else:
-                bg_img = img
+                bg_img = None
             face_paste_start_time = bg_enhance_end_time = time.time()
-
+            face_helper.get_inverse_affine(None)
             # paste each restored face to the input image
             # if args.facece_upsample and face_upsampler is not None:
             #     restored_img = face_helper.paste_faces_to_input_image(upsample_img=bg_img, draw_box=args.draw_box,
             #                                                           face_upsampler=face_upsampler)
             # else:
-            if num_det_faces > 0:
-                face_helper.get_inverse_affine(None)
-                restored_img = face_helper.paste_faces_to_input_image(upsample_img=bg_img, draw_box=args.draw_box, face_upsampler=None)
-            else:
-                restored_img = bg_img
+            # if num_det_faces > 0:
+            restored_img = face_helper.paste_faces_to_input_image(upsample_img=bg_img, draw_box=args.draw_box)
+            # else:
+            #     restored_img = bg_img
 
         save_start_time = face_paste_end_time = time.time()
         if args.debug:
