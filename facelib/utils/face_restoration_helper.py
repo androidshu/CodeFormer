@@ -147,10 +147,11 @@ class FaceRestoreHelper(object):
         if self.is_gray:
             print('Grayscale input: True')
 
-        if min(self.input_img.shape[:2]) < 512:
-            scale = 512.0/min(self.input_img.shape[:2])
+        min_size = 640.0
+        if min(self.input_img.shape[:2]) < min_size:
+            scale = min_size/min(self.input_img.shape[:2])
 
-            width = height = 512
+            width = height = int(min_size)
             max_length = int(scale * max(self.input_img.shape[:2]))
             if max_length % 2 == 1:
                 max_length += 1
@@ -232,7 +233,7 @@ class FaceRestoreHelper(object):
 
         if bboxes is None or bboxes.shape[0] == 0:
             return 0
-        else:
+        elif scale != 1:
             bboxes = bboxes / scale
 
         eye_threshold = eye_dist_threshold * self.base_scale

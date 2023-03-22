@@ -29,7 +29,11 @@ class VideoIterator:
         return self
 
     def __next__(self):
-        return self.video_reader.get_frame()
+        try:
+            return self.video_reader.get_frame()
+        except Exception as ex:
+            print(f'get frame error:{ex}')
+        return None
 
 
 if __name__ == '__main__':

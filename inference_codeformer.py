@@ -115,9 +115,12 @@ def restore_face_and_upsampler(device, checkpoint, args, result_root, input_img_
         epoch_start_time = time.time()
         # clean all the intermediate results to process the next image
         face_helper.clean_all()
-        i += 1
-        if img_path is None:
+
+        if i - base_offest >= total_img_count:
             break
+        if img_path is None:
+            continue
+        i += 1
 
         if isinstance(img_path, str):
             img_name = os.path.basename(img_path)
@@ -131,6 +134,11 @@ def restore_face_and_upsampler(device, checkpoint, args, result_root, input_img_
                 img_name = f'{img_base_name}_{basename}'
             print(f'[{i + 1}] Processing: {img_name}')
             img = img_path
+            if args.debug is None:
+                if args.suffix is not None:
+                    basename = f'{basename}_{args.suffix}'
+                save_restore_path = os.path.join(result_root, 'source_results', f'{basename}.png')
+                imwrite(img, save_restore_path)
 
         detect_start_time = time.time()
         num_det_faces = 0
@@ -146,7 +154,7 @@ def restore_face_and_upsampler(device, checkpoint, args, result_root, input_img_
             face_helper.read_image(img)
             # get face landmarks for each face
             num_det_faces = face_helper.get_face_landmarks_5(
-                only_center_face=args.only_center_face, resize=640, eye_dist_threshold=30)
+                only_center_face=args.only_center_face, eye_dist_threshold=30)
             print(f'\tdetect {num_det_faces} faces')
             # align and warp each face
             face_helper.align_warp_face()
@@ -189,12 +197,11 @@ def restore_face_and_upsampler(device, checkpoint, args, result_root, input_img_
         # paste_back
         restored_img = None
         if not args.has_aligned:
+            bg_img = None
             # upsample the background
-            if bg_upsampler is not None:
-                # Now only support RealESRGAN for upsampling background
-                bg_img = bg_upsampler.enhance(img, outscale=args.upscale)[0]
-            else:
-                bg_img = None
+            # if bg_upsampler is not None:
+            #     # Now only support RealESRGAN for upsampling background
+            #     bg_img = bg_upsampler.enhance(img, outscale=args.upscale)[0]
             face_paste_start_time = bg_enhance_end_time = time.time()
             face_helper.get_inverse_affine(None)
             # paste each restored face to the input image
@@ -302,6 +309,8 @@ def save_as_video(args, result_root, video_name, fps, audio):
 def save_as_video_async(args, result_root, video_name, fps, audio, restore_img_dqueue):
     from basicsr.utils.video_util import VideoWriter
     print('Video Saving...')
+    if not os.path.exists(result_root):
+        os.makedirs(result_root)
     if args.suffix is not None:
         video_name = f'{video_name}.{args.suffix}'
     else:
@@ -384,27 +393,27 @@ if __name__ == '__main__':
     cuda_count = torch.cuda.device_count()
     print(f"cuda_count:{cuda_count}")
     cuda_count = 1
-    if cuda_count > 1:
-        step = math.ceil(img_count / cuda_count)
-        feature_list = []
-        for i in range(cuda_count):
-            device = get_device(i)
-            start = i * step
-            end = (i + 1) * step
-            if end > img_count:
-                end = img_count
-            print(f"cuda device:{device}, img_count:{img_count}, start:{start}, end:{end}")
-            feature = thread_pool.submit(restore_face_and_upsampler, device, checkpoint, args, result_root, iter(input_img_list[start: end]), total_img_count=end-start, base_offest=start, restore_img_dqueue=restore_img_dqueue)
-            feature_list.append(feature)
-
-        for feature in feature_list:
-            feature.result()
-
-        thread_pool.shutdown()
-    else:
-        device = get_device()
-        # torch.backends.cudnn.benchmark = True
-        restore_face_and_upsampler(device, checkpoint, args, result_root, iter(input_img_list), total_img_count=len(input_img_list), base_offest=0, img_base_name=video_name, restore_img_dqueue=restore_img_dqueue)
+    # if cuda_count > 1:
+    #     step = math.ceil(img_count / cuda_count)
+    #     feature_list = []
+    #     for i in range(cuda_count):
+    #         device = get_device(i)
+    #         start = i * step
+    #         end = (i + 1) * step
+    #         if end > img_count:
+    #             end = img_count
+    #         print(f"cuda device:{device}, img_count:{img_count}, start:{start}, end:{end}")
+    #         feature = thread_pool.submit(restore_face_and_upsampler, device, checkpoint, args, result_root, iter(input_img_list[start: end]), total_img_count=end-start, base_offest=start, restore_img_dqueue=restore_img_dqueue)
+    #         feature_list.append(feature)
+    #
+    #     for feature in feature_list:
+    #         feature.result()
+    #
+    #     thread_pool.shutdown()
+    # else:
+    device = get_device()
+    # torch.backends.cudnn.benchmark = True
+    restore_face_and_upsampler(device, checkpoint, args, result_root, iter(input_img_list), total_img_count=len(input_img_list), base_offest=0, img_base_name=video_name, restore_img_dqueue=restore_img_dqueue)
 
     # save enhanced video
     if input_video:
