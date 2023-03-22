@@ -134,7 +134,8 @@ def restore_face_and_upsampler(device, checkpoint, args, result_root, input_img_
                 img_name = f'{img_base_name}_{basename}'
             print(f'[{i + 1}] Processing: {img_name}')
             img = img_path
-            if args.debug is None:
+
+            if args.debug is True:
                 if args.suffix is not None:
                     basename = f'{basename}_{args.suffix}'
                 save_restore_path = os.path.join(result_root, 'source_results', f'{basename}.png')
@@ -199,9 +200,9 @@ def restore_face_and_upsampler(device, checkpoint, args, result_root, input_img_
         if not args.has_aligned:
             bg_img = None
             # upsample the background
-            # if bg_upsampler is not None:
-            #     # Now only support RealESRGAN for upsampling background
-            #     bg_img = bg_upsampler.enhance(img, outscale=args.upscale)[0]
+            if bg_upsampler is not None:
+                # Now only support RealESRGAN for upsampling background
+                bg_img = bg_upsampler.enhance(img, outscale=args.upscale)[0]
             face_paste_start_time = bg_enhance_end_time = time.time()
             face_helper.get_inverse_affine(None)
             # paste each restored face to the input image
