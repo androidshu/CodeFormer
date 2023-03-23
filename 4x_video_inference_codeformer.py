@@ -56,7 +56,7 @@ def upsampler(device, args, result_root, input_img_it, total_img_count, base_off
         if img is None:
             continue
         i += 1
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        # img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         sr_image = model.predict(img)
         basename = str(i).zfill(6)
 
