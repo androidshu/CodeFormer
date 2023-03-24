@@ -154,8 +154,9 @@ def restore_face_and_upsampler(device, checkpoint, args, result_root, input_img_
         else:
             face_helper.read_image(img)
             # get face landmarks for each face
-            num_det_faces = face_helper.get_face_landmarks_5(
-                only_center_face=args.only_center_face, eye_dist_threshold=30)
+            if args.face_restore:
+                num_det_faces = face_helper.get_face_landmarks_5(
+                    only_center_face=args.only_center_face, eye_dist_threshold=25)
             print(f'\tdetect {num_det_faces} faces')
             # align and warp each face
             face_helper.align_warp_face()
@@ -280,6 +281,7 @@ def parse_argument():
     parser.add_argument('--save_video_fps', type=float, default=None, help='Frame rate for saving video. Default: None')
     parser.add_argument('--thread_count', type=int, default=1, help='Thread count for iamges calculating. Default: 1')
     parser.add_argument('-d', '--debug', type=bool, default=False, help='debug mode. Default: False')
+    parser.add_argument('-f', '--face_restore', type=bool, default=True, help='restore face. Default: True')
 
     args = parser.parse_args()
     return args
