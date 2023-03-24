@@ -32,8 +32,15 @@ def download_to_path(url, file_path):
 if __name__ == '__main__':
 
     input_urls_file_path = sys.argv[1]
+
     with open(input_urls_file_path, "r", encoding="UTF-8") as f:
         url_list = f.readlines()
+
+    if len(sys.argv) >= 4:
+        start = int(sys.argv[2])
+        end = int(sys.argv[3])
+        url_list = url_list[start: min(end, len(url_list))]
+        
     input_urls_file_name = os.path.basename(input_urls_file_path).split('.')[0]
     out_mp4_collect_dir = f'results/{input_urls_file_name}'
     if not os.path.isdir(out_mp4_collect_dir):
