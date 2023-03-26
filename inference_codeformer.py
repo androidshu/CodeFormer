@@ -281,7 +281,7 @@ def parse_argument():
     parser.add_argument('--save_video_fps', type=float, default=None, help='Frame rate for saving video. Default: None')
     parser.add_argument('--thread_count', type=int, default=1, help='Thread count for iamges calculating. Default: 1')
     parser.add_argument('-d', '--debug', type=bool, default=False, help='debug mode. Default: False')
-    parser.add_argument('-f', '--face_restore', type=bool, default=True, help='restore face. Default: True')
+    parser.add_argument('-f', '--no_face_restore', action='store_true', help='restore face. Default: false')
 
     args = parser.parse_args()
     return args
@@ -327,6 +327,7 @@ def save_as_video_async(args, result_root, video_name, fps, audio, restore_img_d
             continue
         restore_img_wrapper = restore_img_dqueue.popleft()
         if restore_img_wrapper.is_ended:
+            print('\nread end buffer, break and exit')
             break
 
         if video_writer is None:
@@ -338,6 +339,7 @@ def save_as_video_async(args, result_root, video_name, fps, audio, restore_img_d
         except Exception as e:
             print(f"error:{e}")
 
+    print('\nsave inner end, close video_writer')
     if video_writer is not None:
         video_writer.close()
 

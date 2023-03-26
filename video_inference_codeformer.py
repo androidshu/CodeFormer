@@ -104,12 +104,13 @@ if __name__ == '__main__':
     # else:
     device = get_device()
     # torch.backends.cudnn.benchmark = True
-    thread_pool = ThreadPoolExecutor()
-    video_save_feature = thread_pool.submit(inference_codeformer.save_as_video_async, args, result_root, video_name, fps, audio, restore_img_dqueue)
+    # thread_pool = ThreadPoolExecutor()
+    # video_save_feature = thread_pool.submit(inference_codeformer.save_as_video_async, args, result_root, video_name, fps, audio, restore_img_dqueue)
 
-    inference_codeformer.restore_face_and_upsampler(device, checkpoint, args, result_root, iter(video_iterator), total_img_count=video_reader.nb_frames, img_base_name=video_name, restore_img_dqueue=restore_img_dqueue)
+    inference_codeformer.restore_face_and_upsampler(device, checkpoint, args, result_root, iter(video_iterator), total_img_count=video_reader.nb_frames, img_base_name=video_name, restore_img_dqueue=None)
     print('\nrestore end')
-    video_save_feature.result()
+    inference_codeformer.save_as_video(args, result_root, video_name, fps, audio)
+    # video_save_feature.result()
     print('\nsave video end')
     if video_reader is not None:
         video_reader.close()
