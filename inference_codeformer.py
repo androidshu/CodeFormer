@@ -154,7 +154,7 @@ def restore_face_and_upsampler(device, checkpoint, args, result_root, input_img_
         else:
             face_helper.read_image(img)
             # get face landmarks for each face
-            if args.face_restore:
+            if args.no_face_restore:
                 num_det_faces = face_helper.get_face_landmarks_5(
                     only_center_face=args.only_center_face, eye_dist_threshold=25)
             print(f'\tdetect {num_det_faces} faces')
