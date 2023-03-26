@@ -302,7 +302,7 @@ def save_as_video(args, result_root, video_name, fps, audio):
         save_restore_path = os.path.join(result_root, video_name)
         vidwriter = VideoWriter(save_restore_path, height, width, fps, audio)
 
-        for img_path in img_list:
+        for img_path in tqdm(img_list):
             # write images to video
             img = cv2.imread(img_path)
             vidwriter.write_frame(img)
