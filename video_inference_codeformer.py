@@ -115,6 +115,6 @@ if __name__ == '__main__':
     if video_reader is not None:
         video_reader.close()
         print('\nclose video read end')
-    thread_pool.shutdown()
+    # thread_pool.shutdown()
     end_time = time.time()
     print('\nAll results are saved in {}, all cost time:{:.2f}秒'.format(result_root, end_time - start_time))
