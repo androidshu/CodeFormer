@@ -118,9 +118,9 @@ def restore_face_and_upsampler(device, checkpoint, args, result_root, input_img_
 
         if i - base_offest >= total_img_count:
             break
+        i += 1
         if img_path is None:
             continue
-        i += 1
 
         if isinstance(img_path, str):
             img_name = os.path.basename(img_path)
