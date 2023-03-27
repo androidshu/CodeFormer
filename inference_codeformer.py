@@ -141,6 +141,11 @@ def restore_face_and_upsampler(device, checkpoint, args, result_root, input_img_
                 save_restore_path = os.path.join(result_root, 'source_results', f'{basename}.png')
                 imwrite(img, save_restore_path)
 
+        if restore_img_dqueue is None:
+            save_restore_path = os.path.join(result_root, 'final_results', f'{basename}.png')
+            if os.path.exists(save_restore_path):
+                continue
+
         detect_start_time = time.time()
         num_det_faces = 0
         if args.has_aligned:
