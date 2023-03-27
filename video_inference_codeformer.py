@@ -53,6 +53,11 @@ if __name__ == '__main__':
         video_reader = VideoReader(args.input_path)
         video_iterator = VideoIterator(video_reader)
         minWH = min(video_reader.width, video_reader.height)
+        if minWH < 600:
+            args.face_upsample = True
+            args.bg_upsampler = "realesrgan"
+            args.upscale = 4
+            args.fidelity_weight = 1.0
         if minWH < 720:
             args.face_upsample = True
             args.bg_upsampler = "realesrgan"

@@ -46,11 +46,14 @@ def set_realesrgan(device, args):
         num_feat=64,
         num_block=23,
         num_grow_ch=32,
-        scale=2
+        scale=args.upscale
     )
+    model_path = "https://github.com/sczhou/CodeFormer/releases/download/v0.1.0/RealESRGAN_x2plus.pth"
+    if args.upscale == 4:
+        model_path = "/Users/bevis/PycharmProjects/CodeFormer/weights/RealESRGAN_x4.pth"
     upsampler = RealESRGANer(
-        scale=2,
-        model_path="https://github.com/sczhou/CodeFormer/releases/download/v0.1.0/RealESRGAN_x2plus.pth",
+        scale=args.upscale,
+        model_path=model_path,
         model=model,
         tile=args.bg_tile,
         tile_pad=40,
@@ -76,7 +79,7 @@ def restore_face_and_upsampler(device, checkpoint, args, result_root, input_img_
     net.eval()
 
     face_helper = FaceRestoreHelper(
-        args.upscale,
+        2,
         face_size=512,
         crop_ratio=(1, 1),
         det_model=args.detection_model,
@@ -141,7 +144,7 @@ def restore_face_and_upsampler(device, checkpoint, args, result_root, input_img_
                 save_restore_path = os.path.join(result_root, 'source_results', f'{basename}.png')
                 imwrite(img, save_restore_path)
 
-        if restore_img_dqueue is None:
+        if restore_img_dqueue is None and not args.debug:
             save_restore_path = os.path.join(result_root, 'final_results', f'{basename}.png')
             if os.path.exists(save_restore_path):
                 continue
@@ -159,9 +162,9 @@ def restore_face_and_upsampler(device, checkpoint, args, result_root, input_img_
         else:
             face_helper.read_image(img)
             # get face landmarks for each face
-            # if args.no_face_restore:
-            num_det_faces = face_helper.get_face_landmarks_5(
-                only_center_face=args.only_center_face, eye_dist_threshold=25)
+            if not args.no_face_restore:
+                num_det_faces = face_helper.get_face_landmarks_5(
+                    only_center_face=args.only_center_face, eye_dist_threshold=25)
             print(f'\tdetect {num_det_faces} faces')
             # align and warp each face
             face_helper.align_warp_face()
