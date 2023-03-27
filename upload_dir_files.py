@@ -8,8 +8,9 @@ if __name__ == '__main__':
     input_path_dir = sys.argv[1]
     online_path_dir = sys.argv[2]
 
+    input_files = os.listdir(input_path_dir)
     oss_dir = f'oss://ai-audio-test/{online_path_dir}'
-    for input_file in input_path_dir:
+    for input_file in input_files:
         if input_file.startswith("."):
             continue
 
