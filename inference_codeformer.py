@@ -310,6 +310,8 @@ def save_as_video(args, result_root, video_name, fps, audio):
         for img_path in tqdm(img_list):
             # write images to video
             img = cv2.imread(img_path)
+            if img is None:
+                continue
             vidwriter.write_frame(img)
         vidwriter.close()
 
