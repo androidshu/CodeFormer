@@ -60,6 +60,7 @@ if __name__ == '__main__':
             args.fidelity_weight = 1.0
         else:
             args.upscale = 1
+            args.fidelity_weight = 1.0
 
         audio = video_reader.get_audio()
         fps = video_reader.get_fps() if args.save_video_fps is None else args.save_video_fps
