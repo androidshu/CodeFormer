@@ -62,15 +62,18 @@ if __name__ == '__main__':
         file_only_name = os.path.basename(path).split('.')[0]
         out_mp4_file_name = f'{file_only_name}_1.0/{file_only_name}.mp4'
         out_mp4_path = os.path.join(".", f'results/{out_mp4_file_name}')
+        print(f'out_mp4_path:{out_mp4_path}, exists:{os.path.exists(out_mp4_path)}')
         if os.path.exists(out_mp4_path):
             try:
                 input_mp4_duration = int(VideoFileClip(path).duration)
                 out_mp4_duration = int(VideoFileClip(out_mp4_path).duration)
+                print(f'input_mp4_duration:{input_mp4_duration}, out_mp4_duration:{out_mp4_duration}')
                 if out_mp4_duration > 0 and input_mp4_duration > 0 and abs(
                         out_mp4_duration - input_mp4_duration) < 100:
                     print('output mp4 already exists, and time correct')
 
                     collect_file_path = os.path.join(out_mp4_collect_dir, f'{file_only_name}.mp4')
+                    print(f'collect_file_path:{collect_file_path}, exists:{os.path.exists(collect_file_path)}')
                     if not os.path.exists(collect_file_path):
                         success = shutil.copyfile(out_mp4_path, collect_file_path)
                         print(f'copy file to collect dir success:{success}')
