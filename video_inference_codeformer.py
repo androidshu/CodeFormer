@@ -24,11 +24,16 @@ class VideoIterator:
 
     def __init__(self, reader):
         self.video_reader = reader
+        self.total_count = video_reader.nb_frames
+        self.it_count = 0
 
     def __iter__(self):
         return self
 
     def __next__(self):
+        self.it_count += 1
+        if self.it_count > self.total_count:
+            raise StopIteration
         try:
             return self.video_reader.get_frame()
         except Exception as ex:
@@ -55,10 +60,10 @@ if __name__ == '__main__':
         minWH = min(video_reader.width, video_reader.height)
         if minWH < 600:
             args.face_upsample = True
-            args.bg_upsampler = "realesrgan"
+            # args.bg_upsampler = "realesrgan"
             args.upscale = 4
             args.fidelity_weight = 1.0
-        if minWH < 720:
+        elif minWH < 720:
             args.face_upsample = True
             args.bg_upsampler = "realesrgan"
             args.upscale = 2
